@@ -117,6 +117,8 @@ def main(config_path):
     num_workers = config["dataset"]["num_workers"]
     download = config["dataset"]["download"]
 
+    model_name = config["model"]["name"]
+
     device = get_device()
 
     print(f"Experimento: {experiment_name}")
@@ -150,6 +152,7 @@ def main(config_path):
     model = create_vit_model(
         num_classes=num_classes,
         pretrained=False,
+        model_name=model_name,
     )
 
     model, checkpoint = load_checkpoint(

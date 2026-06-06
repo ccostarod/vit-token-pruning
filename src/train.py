@@ -106,6 +106,7 @@ def main(config_path: str):
     num_workers = config["dataset"]["num_workers"]
     download = config["dataset"]["download"]
 
+    model_name = config["model"]["name"]
     pretrained = config["model"]["pretrained"]
 
     epochs = config["training"]["epochs"]
@@ -141,6 +142,7 @@ def main(config_path: str):
     model = create_vit_model(
         num_classes=num_classes,
         pretrained=pretrained,
+        model_name=model_name,
     )
 
     model = model.to(device)

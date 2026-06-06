@@ -1,16 +1,15 @@
-import torch.nn as nn
-from torchvision.models import vit_b_16, ViT_B_16_Weights
+import timm
 
-def create_vit_model(num_classes: int = 102, pretrained: bool = True):
-    if pretrained:
-        weights = ViT_B_16_Weights.DEFAULT
-    else:
-        weights = None
 
-    model = vit_b_16(weights=weights)
-    
-    # Substituir a cabeça de classificação para o número correto de classes
-    in_features = model.heads.head.in_features
-    model.heads.head = nn.Linear(in_features, num_classes)
-    
+def create_vit_model(
+    num_classes: int = 102,
+    pretrained: bool = True,
+    model_name: str = "vit_base_patch16_224.augreg_in21k",
+):
+    model = timm.create_model(
+        model_name,
+        pretrained=pretrained,
+        num_classes=num_classes,
+    )
+
     return model

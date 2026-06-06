@@ -1,11 +1,11 @@
 experiment:
-  name: baseline_vit_b16
+  name: vit_b16_timm_in21k
   seed: 42
 
 paths:
   data_dir: ./dataset
   checkpoint_dir: ./checkpoints
-  results_dir: ./results/baseline
+  results_dir: ./results/vit_b16_timm_in21k
 
 dataset:
   image_size: 224
@@ -15,9 +15,10 @@ dataset:
   download: true
 
 model:
+  name: vit_base_patch16_224.augreg_in21k
   pretrained: true
 
 training:
   epochs: 30
   lr: 0.00003
-  weight_decay: 0.01
+  weight_decay: 0.0
