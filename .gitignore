@@ -1,4 +1,6 @@
-data/
-src/check_data.py
+/dataset/
 __pycache__/
-results/
+/results/
+/checkpoints/
+.env
+check_data.py
