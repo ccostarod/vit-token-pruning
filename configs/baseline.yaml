@@ -1,0 +1,23 @@
+experiment:
+  name: baseline_vit_b16
+  seed: 42
+
+paths:
+  data_dir: ./data
+  checkpoint_dir: ./checkpoints
+  results_dir: ./results/baseline
+
+dataset:
+  image_size: 224
+  num_classes: 102
+  batch_size: 32
+  num_workers: 2
+  download: true
+
+model:
+  pretrained: true
+
+training:
+  epochs: 30
+  lr: 0.00003
+  weight_decay: 0.01

@@ -1,0 +1,4 @@
+data/
+src/check_data.py
+__pycache__/
+results/
