@@ -105,6 +105,7 @@ def main(config_path: str):
     batch_size = config["dataset"]["batch_size"]
     num_workers = config["dataset"]["num_workers"]
     download = config["dataset"]["download"]
+    use_augmentation = config["dataset"].get("augmentation", False)
 
     model_name = config["model"]["name"]
     pretrained = config["model"]["pretrained"]
@@ -127,6 +128,7 @@ def main(config_path: str):
         data_dir=data_dir,
         image_size=image_size,
         download=download,
+        use_augmentation=use_augmentation,
     )
 
     train_loader, val_loader = get_train_val_dataloaders(

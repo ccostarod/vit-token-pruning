@@ -1,11 +1,11 @@
 experiment:
-  name: vit_b16_timm_in21k
+  name: reg_e1_augmentation
   seed: 42
 
 paths:
   data_dir: ./dataset
   checkpoint_dir: ./checkpoints
-  results_dir: ./results/vit_b16_timm_in21k
+  results_dir: ./results/reg_e1_augmentation
 
 dataset:
   image_size: 224
@@ -13,7 +13,7 @@ dataset:
   batch_size: 32
   num_workers: 2
   download: true
-  augmentation: false
+  augmentation: true
 
 model:
   name: vit_base_patch16_224.augreg_in21k
@@ -22,4 +22,4 @@ model:
 training:
   epochs: 30
   lr: 0.00003
-  weight_decay: 0.0
+  weight_decay: 0.01

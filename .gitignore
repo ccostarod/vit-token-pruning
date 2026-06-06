@@ -4,3 +4,4 @@ __pycache__/
 /checkpoints/
 .env
 check_data.py
+context.md

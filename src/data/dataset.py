@@ -7,10 +7,18 @@ from data.transforms import get_train_transforms, get_eval_transforms
 
 NUM_CLASSES = 102
 
-def get_train_val_datasets(data_dir: str, image_size: int = 224, download: bool = True):
+def get_train_val_datasets(
+    data_dir: str,
+    image_size: int = 224,
+    download: bool = True,
+    use_augmentation: bool = False,
+):
     data_dir = Path(data_dir)
 
-    train_transform = get_train_transforms(image_size)
+    train_transform = get_train_transforms(
+        image_size=image_size,
+        use_augmentation=use_augmentation,
+    )
     eval_transform = get_eval_transforms(image_size)
 
     train_dataset = Flowers102(
