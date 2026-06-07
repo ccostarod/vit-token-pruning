@@ -5,3 +5,6 @@ __pycache__/
 .env
 check_data.py
 context.md
+notebooks/inspect_data_augmentation.ipynb
+notebooks/
+

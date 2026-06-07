@@ -12,12 +12,14 @@ def get_train_val_datasets(
     image_size: int = 224,
     download: bool = True,
     use_augmentation: bool = False,
+    random_erasing_p: float = 0.0,
 ):
     data_dir = Path(data_dir)
 
     train_transform = get_train_transforms(
         image_size=image_size,
         use_augmentation=use_augmentation,
+        random_erasing_p=random_erasing_p,
     )
     eval_transform = get_eval_transforms(image_size)
 

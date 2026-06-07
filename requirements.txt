@@ -9,3 +9,4 @@ scikit-learn
 tqdm
 timm
 albumentations
+cv2

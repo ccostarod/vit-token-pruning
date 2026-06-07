@@ -107,6 +107,7 @@ def main(config_path: str):
     num_workers = config["dataset"]["num_workers"]
     download = config["dataset"]["download"]
     use_augmentation = config["dataset"].get("augmentation", False)
+    random_erasing_p = config["dataset"].get("random_erasing_p", 0.0)
 
     model_name = config["model"]["name"]
     pretrained = config["model"]["pretrained"]
@@ -134,6 +135,7 @@ def main(config_path: str):
         image_size=image_size,
         download=download,
         use_augmentation=use_augmentation,
+        random_erasing_p=random_erasing_p,
     )
 
     train_loader, val_loader = get_train_val_dataloaders(

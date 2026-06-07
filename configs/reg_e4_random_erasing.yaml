@@ -1,11 +1,11 @@
 experiment:
-  name: reg_e2_increase_weight_decay
+  name: reg_e4_random_erasing
   seed: 42
 
 paths:
   data_dir: ./dataset
   checkpoint_dir: ./checkpoints
-  results_dir: ./results/reg_e2_increase_weight_decay
+  results_dir: ./results/reg_e4_random_erasing
 
 dataset:
   image_size: 224
@@ -14,7 +14,7 @@ dataset:
   num_workers: 2
   download: true
   augmentation: true
-  random_erasing_p: 0.0
+  random_erasing_p: 0.15
 
 model:
   name: vit_base_patch16_224.augreg_in21k
@@ -24,7 +24,7 @@ training:
   epochs: 30
   lr: 0.00003
   weight_decay: 0.05
-  label_smoothing: 0.0
+  label_smoothing: 0.1
   early_stopping:
     enabled: true
     monitor: val_accuracy
