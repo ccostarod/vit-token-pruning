@@ -23,5 +23,6 @@ training:
   epochs: 30
   lr: 0.00003
   weight_decay: 0.0
+  label_smoothing: 0.0
   early_stopping:
     enabled: false

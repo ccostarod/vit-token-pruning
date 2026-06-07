@@ -114,6 +114,7 @@ def main(config_path: str):
     epochs = config["training"]["epochs"]
     lr = config["training"]["lr"]
     weight_decay = config["training"]["weight_decay"]
+    label_smoothing = config["training"].get("label_smoothing", 0.0)
     early_stopping_config = config["training"].get("early_stopping", {})
     early_stopping_enabled = early_stopping_config.get("enabled", False)
     early_stopping_monitor = early_stopping_config.get("monitor", "val_accuracy")
@@ -153,7 +154,7 @@ def main(config_path: str):
 
     model = model.to(device)
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
     optimizer = AdamW(
         model.parameters(),

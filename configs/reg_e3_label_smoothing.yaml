@@ -1,11 +1,11 @@
 experiment:
-  name: reg_e1_augmentation
+  name: reg_e3_label_smoothing
   seed: 42
 
 paths:
   data_dir: ./dataset
   checkpoint_dir: ./checkpoints
-  results_dir: ./results/reg_e1_augmentation
+  results_dir: ./results/reg_e3_label_smoothing
 
 dataset:
   image_size: 224
@@ -22,7 +22,11 @@ model:
 training:
   epochs: 30
   lr: 0.00003
-  weight_decay: 0.01
-  label_smoothing: 0.0
+  weight_decay: 0.05
+  label_smoothing: 0.1
   early_stopping:
-    enabled: false
+    enabled: true
+    monitor: val_accuracy
+    mode: max
+    patience: 7
+    min_delta: 0.0
