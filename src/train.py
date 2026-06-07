@@ -18,6 +18,7 @@ from utils import (
     save_history_csv,
     save_checkpoint,
     plot_training_curves,
+    EarlyStopping,
 )
 
 DEFAULT_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "configs" / "baseline.yaml")
@@ -113,6 +114,9 @@ def main(config_path: str):
     epochs = config["training"]["epochs"]
     lr = config["training"]["lr"]
     weight_decay = config["training"]["weight_decay"]
+    early_stopping_config = config["training"].get("early_stopping", {})
+    early_stopping_enabled = early_stopping_config.get("enabled", False)
+    early_stopping_monitor = early_stopping_config.get("monitor", "val_accuracy")
 
     set_seed(seed)
 
@@ -175,6 +179,20 @@ def main(config_path: str):
     best_val_accuracy = 0.0
 
     checkpoint_path = Path(checkpoint_dir) / f"{experiment_name}_best.pth"
+    early_stopping = None
+
+    if early_stopping_enabled:
+        early_stopping = EarlyStopping(
+            patience=early_stopping_config.get("patience", 7),
+            min_delta=early_stopping_config.get("min_delta", 0.0),
+            mode=early_stopping_config.get("mode", "max"),
+        )
+
+        print(
+            "Early stopping habilitado | "
+            f"monitor: {early_stopping_monitor} | "
+            f"patience: {early_stopping.patience}"
+        )
 
     for epoch in range(1, epochs + 1):
         print(f"\nÉpoca {epoch}/{epochs}")
@@ -234,6 +252,25 @@ def main(config_path: str):
             )
 
             print(f"Novo melhor modelo salvo em: {checkpoint_path}")
+
+        monitored_values = {
+            "val_accuracy": val_accuracy,
+            "val_macro_f1": val_macro_f1,
+            "val_loss": val_loss,
+        }
+
+        if early_stopping_monitor not in monitored_values:
+            raise ValueError(
+                "Monitor de early stopping invalido: "
+                f"{early_stopping_monitor}. Use val_accuracy, val_macro_f1 ou val_loss."
+            )
+
+        if early_stopping is not None and early_stopping.step(monitored_values[early_stopping_monitor]):
+            print(
+                "Early stopping acionado: "
+                f"{early_stopping.counter} epocas sem melhora em {early_stopping_monitor}."
+            )
+            break
 
     history_csv_path = Path(results_dir) / "training_history.csv"
 

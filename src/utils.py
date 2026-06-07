@@ -22,6 +22,39 @@ def set_seed(seed: int = 42):
 def get_device():
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+class EarlyStopping:
+    def __init__(self, patience: int = 7, min_delta: float = 0.0, mode: str = "max"):
+        if mode not in ("min", "max"):
+            raise ValueError("mode deve ser 'min' ou 'max'.")
+
+        self.patience = patience
+        self.min_delta = min_delta
+        self.mode = mode
+        self.best_score = None
+        self.counter = 0
+        self.should_stop = False
+
+    def step(self, score: float):
+        if self.best_score is None:
+            self.best_score = score
+            return False
+
+        if self._is_improvement(score):
+            self.best_score = score
+            self.counter = 0
+            return False
+
+        self.counter += 1
+        self.should_stop = self.counter >= self.patience
+
+        return self.should_stop
+
+    def _is_improvement(self, score: float):
+        if self.mode == "max":
+            return score > self.best_score + self.min_delta
+
+        return score < self.best_score - self.min_delta
+
 def create_dir(path: str):
     Path(path).mkdir(parents=True, exist_ok=True)
 
@@ -85,4 +118,3 @@ def plot_training_curves(history, output_dir):
     plt.grid(True)
     plt.savefig(output_dir / "macro_f1_curve.png", dpi=300, bbox_inches="tight")
     plt.close()
-    
