@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
+from timm.data.mixup import Mixup
+from timm.loss import SoftTargetCrossEntropy
 from tqdm import tqdm
 
 from data.dataset import get_train_val_datasets, get_train_val_dataloaders
@@ -23,7 +25,7 @@ from utils import (
 
 DEFAULT_CONFIG_PATH = str(Path(__file__).resolve().parents[1] / "configs" / "baseline.yaml")
 
-def train_epoch(model, train_loader, criterion, optimizer, device):
+def train_epoch(model, train_loader, criterion, optimizer, device, mixup_fn=None):
     model.train()
 
     running_loss = 0.0
@@ -34,8 +36,12 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
 
     for images, labels in progress_bar:
         images, labels = images.to(device), labels.to(device)
+        labels_for_metrics = labels
 
         optimizer.zero_grad()
+
+        if mixup_fn is not None:
+            images, labels = mixup_fn(images, labels)
 
         outputs = model(images)
         loss = criterion(outputs, labels)
@@ -47,7 +53,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
         running_loss += loss.item() * batch_size
 
         all_outputs.append(outputs.detach().cpu())
-        all_targets.append(labels.detach().cpu())
+        all_targets.append(labels_for_metrics.detach().cpu())
 
         progress_bar.set_postfix({"loss": f"{loss.item():.4f}"})
 
@@ -116,6 +122,7 @@ def main(config_path: str):
     lr = config["training"]["lr"]
     weight_decay = config["training"]["weight_decay"]
     label_smoothing = config["training"].get("label_smoothing", 0.0)
+    mixup_alpha = config["training"].get("mixup_alpha", 0.0)
     early_stopping_config = config["training"].get("early_stopping", {})
     early_stopping_enabled = early_stopping_config.get("enabled", False)
     early_stopping_monitor = early_stopping_config.get("monitor", "val_accuracy")
@@ -156,7 +163,28 @@ def main(config_path: str):
 
     model = model.to(device)
 
-    criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+    eval_criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+    train_criterion = eval_criterion
+    mixup_fn = None
+
+    if mixup_alpha > 0.0:
+        mixup_fn = Mixup(
+            mixup_alpha=mixup_alpha,
+            cutmix_alpha=0.0,
+            prob=1.0,
+            switch_prob=0.0,
+            mode="batch",
+            label_smoothing=label_smoothing,
+            num_classes=num_classes,
+        )
+        train_criterion = SoftTargetCrossEntropy()
+
+        print(
+            "MixUp habilitado | "
+            f"alpha: {mixup_alpha} | "
+            "prob: 1.0 | "
+            "mode: batch"
+        )
 
     optimizer = AdamW(
         model.parameters(),
@@ -203,15 +231,16 @@ def main(config_path: str):
         train_loss, train_metrics = train_epoch(
             model=model,
             train_loader=train_loader,
-            criterion=criterion,
+            criterion=train_criterion,
             optimizer=optimizer,
             device=device,
+            mixup_fn=mixup_fn,
         )
 
         val_loss, val_metrics = validate(
             model=model,
             val_loader=val_loader,
-            criterion=criterion,
+            criterion=eval_criterion,
             device=device,
         )
 
