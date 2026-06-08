@@ -118,6 +118,7 @@ def main(config_path):
     download = config["dataset"]["download"]
 
     model_name = config["model"]["name"]
+    label_smoothing = config["training"].get("label_smoothing", 0.0)
 
     device = get_device()
 
@@ -163,7 +164,7 @@ def main(config_path):
 
     model = model.to(device)
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
     test_loss, test_metrics, y_true, y_pred = evaluate_model(
         model=model,
@@ -177,6 +178,7 @@ def main(config_path):
         "checkpoint_path": str(checkpoint_path),
         "checkpoint_epoch": int(checkpoint["epoch"]),
         "best_validation_metric": float(checkpoint["best_metric"]),
+        "label_smoothing": float(label_smoothing),
         "test_loss": float(test_loss),
         "test_accuracy": float(test_metrics["accuracy"]),
         "test_macro_f1": float(test_metrics["macro_f1"]),
