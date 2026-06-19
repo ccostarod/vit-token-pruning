@@ -129,7 +129,6 @@ def main(config: dict):
 
     device = get_device()
     print(f"Experimento: {experiment_name}")
-    print(f"Config usada: {config_path}")
     print(f"Dispositivo usado: {device}")
 
     create_dir(checkpoint_dir)
