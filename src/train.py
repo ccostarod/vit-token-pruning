@@ -97,9 +97,7 @@ def validate(model, val_loader, criterion, device):
 
     return epoch_loss, metrics
 
-def main(config_path: str):
-    config = load_config(config_path)
-
+def main(config: dict):
     experiment_name = config["experiment"]["name"]
     seed = config["experiment"]["seed"]
 
@@ -317,14 +315,18 @@ def main(config_path: str):
     print(f"Melhor validation accuracy: {best_val_accuracy:.4f}")
     print(f"Histórico salvo em: {history_csv_path}")
     print(f"Gráficos salvos em: {results_dir}")
+    
+    return best_val_accuracy
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         config_path = sys.argv[1]
     else:
         config_path = DEFAULT_CONFIG_PATH
+        
+    config = load_config(config_path)
 
-    main(config_path)
+    main(config)
 
     
 
