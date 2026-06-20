@@ -11,6 +11,8 @@ from src.train import main as train_model
 # Configuração escolhida para a etapa de otimização de hiperparâmetros (E4)
 CHOSEN_CONFIG_PATH = "configs/reg_e4_random_erasing.yaml"
 
+NUM_TRIALS = 30
+
 def objective(trial):
     base_config = load_config(CHOSEN_CONFIG_PATH)
     
@@ -43,6 +45,11 @@ def objective(trial):
     config["paths"]["results_dir"] = f"results/{trial_name}"
     
     print(f"\n[{'-'*10} INICIANDO TRIAL {trial.number} {'-'*10}]")
+    print("Hiperparâmetros escolhidos para esta rodada:")
+    for key, value in trial.params.items():
+        print(f"    {key}: {value}")
+    print(f"{'-'*40}\n")
+    
     best_val_acc = train_model(config)
     
     return best_val_acc
@@ -50,7 +57,7 @@ def objective(trial):
 if __name__ == "__main__":
     study = optuna.create_study(direction="maximize", study_name="vit_tuning")
     
-    study.optimize(objective, n_trials=20)
+    study.optimize(objective, n_trials=NUM_TRIALS)
     
     print("\n" + "="*40)
     print("OTIMIZAÇÃO CONCLUÍDA!")
