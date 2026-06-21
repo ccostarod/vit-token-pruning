@@ -52,6 +52,24 @@ def objective(trial):
     
     best_val_acc = train_model(config)
     
+    # --- PROCESSO DE LIMPEZA DE DISCO ---
+    try:
+        best_so_far = trial.study.best_value
+    except ValueError:
+        best_so_far = 0.0
+
+    # Não houve novo recorde de acurácia
+    if best_val_acc < best_so_far:
+        # Apaga a pasta de checkpoints desse trial
+        if os.path.exists(config["paths"]["checkpoint_dir"]):
+            shutil.rmtree(config["paths"]["checkpoint_dir"])
+            
+        # Apaga a pasta de resultados (gráficos jpg)
+        if os.path.exists(config["paths"]["results_dir"]):
+            shutil.rmtree(config["paths"]["results_dir"])
+    else:
+        print(f"🏆 Novo recorde! Guardando os arquivos do Trial {trial.number} ({best_val_acc:.4f})")
+    
     return best_val_acc
 
 if __name__ == "__main__":
