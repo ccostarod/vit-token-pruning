@@ -52,7 +52,7 @@ def objective(trial):
         melhor_trial_id = trial.study.best_trial.number
         status_recorde = f"{melhor_visto:.4f} (obtido no Trial {melhor_trial_id})"
     except ValueError:
-        best_so_far = 0.0
+        status_recorde = 0.0
     
     print(f"\n[{'-'*10} INICIANDO TRIAL {trial.number} {'-'*10}]")
     
