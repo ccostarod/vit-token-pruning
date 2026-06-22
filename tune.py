@@ -13,7 +13,7 @@ from src.train import main as train_model
 # Configuração escolhida para a etapa de otimização de hiperparâmetros (E4)
 CHOSEN_CONFIG_PATH = "configs/reg_e4_random_erasing.yaml"
 
-NUM_TRIALS = 30
+NUM_TRIALS = 25
 
 def objective(trial):
     base_config = load_config(CHOSEN_CONFIG_PATH)
@@ -46,7 +46,18 @@ def objective(trial):
     config["paths"]["checkpoint_dir"] = f"checkpoints/{trial_name}"
     config["paths"]["results_dir"] = f"results/{trial_name}"
     
+    try:
+        # Pega o melhor valor e o número do trial que alcançou esse valor
+        melhor_visto = trial.study.best_value
+        melhor_trial_id = trial.study.best_trial.number
+        status_recorde = f"{melhor_visto:.4f} (obtido no Trial {melhor_trial_id})"
+    except ValueError:
+        best_so_far = 0.0
+    
     print(f"\n[{'-'*10} INICIANDO TRIAL {trial.number} {'-'*10}]")
+    
+    print(f"🥇 Melhor Acurácia Atual do Estudo: {status_recorde}")
+    
     print("Hiperparâmetros escolhidos para esta rodada:")
     for key, value in trial.params.items():
         print(f"    {key}: {value}")
