@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 import torch
+import torch.nn as nn
 import timm
 
 SRC_DIR = Path(__file__).resolve().parents[1]
@@ -14,6 +15,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from data.dataset import get_test_dataset, get_test_dataloader
+from metrics import calculate_metrics
 from model.pruned_vit import create_pruned_vit_model
 from model.vit import create_vit_model
 from utils import create_dir, get_device, load_checkpoint, load_config
@@ -102,31 +104,46 @@ def get_teacher_token_count(model):
     return int(patch_embed.num_patches + 1)
 
 
-def benchmark_model(model, test_loader, device, warmup_batches, max_batches):
+def benchmark_model(model, test_loader, criterion, device, warmup_batches, max_batches):
     model.eval()
 
     measured_images = 0
     measured_batches = 0
+    evaluated_images = 0
+    evaluated_batches = 0
     total_time_seconds = 0.0
+    running_loss = 0.0
+    all_outputs = []
+    all_targets = []
 
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
 
     with torch.no_grad():
-        for batch_idx, (images, _) in enumerate(test_loader):
+        for batch_idx, (images, labels) in enumerate(test_loader):
             images = images.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
 
             synchronize_if_needed(device)
             start_time = time.perf_counter()
-            _ = model(images)
+            outputs = model(images)
             synchronize_if_needed(device)
             elapsed = time.perf_counter() - start_time
+
+            loss = criterion(outputs, labels)
+            batch_size = images.size(0)
+            running_loss += loss.item() * batch_size
+            evaluated_images += batch_size
+            evaluated_batches += 1
+
+            all_outputs.append(outputs.detach().cpu())
+            all_targets.append(labels.detach().cpu())
 
             if batch_idx < warmup_batches:
                 continue
 
             total_time_seconds += elapsed
-            measured_images += images.size(0)
+            measured_images += batch_size
             measured_batches += 1
 
             if max_batches is not None and measured_batches >= max_batches:
@@ -141,7 +158,17 @@ def benchmark_model(model, test_loader, device, warmup_batches, max_batches):
     if device.type == "cuda":
         peak_memory_mb = torch.cuda.max_memory_allocated(device) / (1024**2)
 
+    all_outputs = torch.cat(all_outputs, dim=0)
+    all_targets = torch.cat(all_targets, dim=0)
+    prediction_metrics = calculate_metrics(all_outputs, all_targets)
+    evaluation_loss = running_loss / evaluated_images
+
     return {
+        "evaluated_batches": evaluated_batches,
+        "evaluated_images": evaluated_images,
+        "evaluation_loss": evaluation_loss,
+        "evaluation_accuracy": float(prediction_metrics["accuracy"]),
+        "evaluation_macro_f1": float(prediction_metrics["macro_f1"]),
         "measured_batches": measured_batches,
         "measured_images": measured_images,
         "total_inference_time_seconds": total_time_seconds,
@@ -259,10 +286,14 @@ def main():
         device=device,
     )
     model = model.to(device)
+    criterion = nn.CrossEntropyLoss(
+        label_smoothing=config["training"].get("label_smoothing", 0.0)
+    )
 
     metrics = benchmark_model(
         model=model,
         test_loader=test_loader,
+        criterion=criterion,
         device=device,
         warmup_batches=args.warmup_batches,
         max_batches=args.max_batches,
@@ -282,6 +313,9 @@ def main():
     json_path, csv_path = save_results(results, results_dir)
 
     print("\nBenchmark finalizado.")
+    print(f"Loss: {results['evaluation_loss']:.4f}")
+    print(f"Accuracy: {results['evaluation_accuracy']:.4f}")
+    print(f"Macro-F1: {results['evaluation_macro_f1']:.4f}")
     print(f"Latencia por imagem: {results['latency_ms_per_image']:.4f} ms")
     print(f"Throughput: {results['throughput_images_per_second']:.2f} imagens/s")
     if results["peak_memory_mb"] is not None:
