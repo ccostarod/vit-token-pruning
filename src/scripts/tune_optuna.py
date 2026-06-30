@@ -11,7 +11,7 @@ from src.utils import load_config
 from src.train import main as train_model
 
 # Configuração escolhida para a etapa de otimização de hiperparâmetros (E4)
-CHOSEN_CONFIG_PATH = "configs/reg_e4_random_erasing.yaml"
+CHOSEN_CONFIG_PATH = "configs/regularization/reg_e4_random_erasing.yaml"
 
 NUM_TRIALS = 25
 
