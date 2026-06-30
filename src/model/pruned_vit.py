@@ -21,6 +21,7 @@ class PrunedViT(nn.Module):
         prune_layers: list[int] | None = None,
         keep_ratios: list[float] | None = None,
         score_method: str = "token_norm",
+        track_token_indices: bool = False,
     ):
         super().__init__()
 
@@ -40,6 +41,7 @@ class PrunedViT(nn.Module):
         self.keep_ratios = keep_ratios or []
         self.score_method = score_method
         self.score_fn = SCORE_FUNCTIONS[score_method]
+        self.track_token_indices = track_token_indices
         self.last_token_counts = []
         self.last_keep_indices = []
 
@@ -52,10 +54,13 @@ class PrunedViT(nn.Module):
 
     def forward(self, images: torch.Tensor) -> torch.Tensor:
         x = self._prepare_tokens(images)
-        patch_indices = torch.arange(
-            x.size(1) - 1,
-            device=x.device,
-        ).unsqueeze(0).expand(x.size(0), -1)
+
+        patch_indices = None
+        if self.track_token_indices:
+            patch_indices = torch.arange(
+                x.size(1) - 1,
+                device=x.device,
+            ).unsqueeze(0).expand(x.size(0), -1)
 
         self.last_token_counts = [x.size(1)]
         self.last_keep_indices = []
@@ -65,14 +70,21 @@ class PrunedViT(nn.Module):
 
             if layer_idx in self.prune_config:
                 scores = self.score_fn(x)
-                x, keep_indices = topk_prune_tokens(
-                    x=x,
-                    scores=scores,
-                    keep_ratio=self.prune_config[layer_idx],
-                    return_indices=True,
-                )
-                patch_indices = patch_indices.gather(dim=1, index=keep_indices)
-                self.last_keep_indices.append(patch_indices.detach().cpu())
+                if self.track_token_indices:
+                    x, keep_indices = topk_prune_tokens(
+                        x=x,
+                        scores=scores,
+                        keep_ratio=self.prune_config[layer_idx],
+                        return_indices=True,
+                    )
+                    patch_indices = patch_indices.gather(dim=1, index=keep_indices)
+                    self.last_keep_indices.append(patch_indices.detach().cpu())
+                else:
+                    x = topk_prune_tokens(
+                        x=x,
+                        scores=scores,
+                        keep_ratio=self.prune_config[layer_idx],
+                    )
 
             self.last_token_counts.append(x.size(1))
 
@@ -125,6 +137,7 @@ def create_pruned_vit_model(
     prune_layers: list[int] | None = None,
     keep_ratios: list[float] | None = None,
     score_method: str = "token_norm",
+    track_token_indices: bool = False,
 ):
     return PrunedViT(
         num_classes=num_classes,
@@ -133,4 +146,5 @@ def create_pruned_vit_model(
         prune_layers=prune_layers,
         keep_ratios=keep_ratios,
         score_method=score_method,
+        track_token_indices=track_token_indices,
     )
