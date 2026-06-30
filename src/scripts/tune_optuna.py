@@ -5,7 +5,7 @@ import os
 import shutil
 import optuna
 
-sys.path.append(str(Path(__file__).resolve().parent / "src"))
+sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from src.utils import load_config
 from src.train import main as train_model
@@ -56,7 +56,7 @@ def objective(trial):
     
     print(f"\n[{'-'*10} INICIANDO TRIAL {trial.number} {'-'*10}]")
     
-    print(f"🥇 Melhor Acurácia Atual do Estudo: {status_recorde}")
+    print(f"Melhor Acurácia Atual do Estudo: {status_recorde}")
     
     print("Hiperparâmetros escolhidos para esta rodada:")
     for key, value in trial.params.items():
@@ -81,7 +81,7 @@ def objective(trial):
         if os.path.exists(config["paths"]["results_dir"]):
             shutil.rmtree(config["paths"]["results_dir"])
     else:
-        print(f"🏆 Novo recorde! Guardando os arquivos do Trial {trial.number} ({best_val_acc:.4f})")
+        print(f"Novo recorde! Guardando os arquivos do Trial {trial.number} ({best_val_acc:.4f})")
     
     return best_val_acc
 
