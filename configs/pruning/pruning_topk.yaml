@@ -1,0 +1,41 @@
+experiment:
+  name: pruning_topk
+  seed: 42
+
+paths:
+  data_dir: ./dataset
+  checkpoint_dir: ./checkpoints
+  results_dir: ./results/pruning_topk
+
+dataset:
+  image_size: 224
+  num_classes: 102
+  batch_size: 32
+  num_workers: 2
+  download: true
+  augmentation: true
+  random_erasing_p: 0.09852543003845121
+
+model:
+  name: vit_base_patch16_224.augreg_in21k
+  pretrained: false
+  init_checkpoint: ./checkpoints/optuna_best_best.pth
+
+pruning:
+  method: topk
+  score_method: token_norm
+  prune_layers: [3, 6, 9]
+  keep_ratios: [0.9, 0.8, 0.7]
+
+training:
+  epochs: 30
+  lr: 0.0000606870627400301
+  weight_decay: 0.007716841118309199
+  label_smoothing: 0.2912737878542151
+  mixup_alpha: 0.8830736738977027
+  early_stopping:
+    enabled: true
+    monitor: val_accuracy
+    mode: max
+    patience: 7
+    min_delta: 0.0
