@@ -57,9 +57,12 @@ def main(config: dict):
     init_checkpoint = config["model"].get("init_checkpoint")
 
     pruning_config = config["pruning"]
+    pruning_method = pruning_config.get("method", "topk")
     prune_layers = pruning_config["prune_layers"]
     keep_ratios = pruning_config["keep_ratios"]
     score_method = pruning_config.get("score_method", "token_norm")
+    preserve_order = pruning_config.get("preserve_order", True)
+    history_config = pruning_config.get("history")
 
     epochs = config["training"]["epochs"]
     lr = config["training"]["lr"]
@@ -75,7 +78,7 @@ def main(config: dict):
     device = get_device()
     print(f"Experimento: {experiment_name}")
     print(f"Dispositivo usado: {device}")
-    print(f"Pruning: Top-K | score: {score_method}")
+    print(f"Pruning: {pruning_method} | score: {score_method}")
     print(f"Prune layers: {prune_layers}")
     print(f"Keep ratios: {keep_ratios}")
 
@@ -107,6 +110,9 @@ def main(config: dict):
         prune_layers=prune_layers,
         keep_ratios=keep_ratios,
         score_method=score_method,
+        pruning_method=pruning_method,
+        history_config=history_config,
+        preserve_order=preserve_order,
     )
 
     if init_checkpoint is None:

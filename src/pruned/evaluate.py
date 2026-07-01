@@ -37,9 +37,12 @@ def main(config_path):
     label_smoothing = config["training"].get("label_smoothing", 0.0)
 
     pruning_config = config["pruning"]
+    pruning_method = pruning_config.get("method", "topk")
     prune_layers = pruning_config["prune_layers"]
     keep_ratios = pruning_config["keep_ratios"]
     score_method = pruning_config.get("score_method", "token_norm")
+    preserve_order = pruning_config.get("preserve_order", True)
+    history_config = pruning_config.get("history")
 
     device = get_device()
 
@@ -78,6 +81,9 @@ def main(config_path):
         prune_layers=prune_layers,
         keep_ratios=keep_ratios,
         score_method=score_method,
+        pruning_method=pruning_method,
+        history_config=history_config,
+        preserve_order=preserve_order,
     )
 
     model, checkpoint = load_checkpoint(
@@ -105,10 +111,12 @@ def main(config_path):
         "checkpoint_epoch": int(checkpoint["epoch"]),
         "best_validation_metric": float(checkpoint["best_metric"]),
         "label_smoothing": float(label_smoothing),
-        "pruning_method": pruning_config["method"],
+        "pruning_method": pruning_method,
         "score_method": score_method,
         "prune_layers": prune_layers,
         "keep_ratios": keep_ratios,
+        "preserve_order": preserve_order,
+        "history_config": history_config,
         "num_tokens_final": num_tokens_final,
         "test_loss": float(test_loss),
         "test_accuracy": float(test_metrics["accuracy"]),

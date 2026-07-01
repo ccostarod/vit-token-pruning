@@ -79,6 +79,9 @@ def create_model(config, model_type):
         prune_layers=pruning_config["prune_layers"],
         keep_ratios=pruning_config["keep_ratios"],
         score_method=pruning_config.get("score_method", "token_norm"),
+        pruning_method=pruning_config.get("method", "topk"),
+        history_config=pruning_config.get("history"),
+        preserve_order=pruning_config.get("preserve_order", True),
     )
 
 
@@ -229,6 +232,8 @@ def build_results(config, config_path, model_type, model, checkpoint_path, check
         results["score_method"] = config["pruning"].get("score_method")
         results["prune_layers"] = config["pruning"].get("prune_layers")
         results["keep_ratios"] = config["pruning"].get("keep_ratios")
+        results["preserve_order"] = config["pruning"].get("preserve_order", True)
+        results["history_config"] = config["pruning"].get("history")
 
     return results
 
