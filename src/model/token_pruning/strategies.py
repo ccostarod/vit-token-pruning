@@ -3,7 +3,7 @@ import torch
 from model.token_pruning.ops import gather_tokens, topk_prune_tokens
 
 
-PRUNING_METHODS = {"topk", "hybrid_history", "trend_adjusted"}
+PRUNING_METHODS = {"topk", "hybrid_history", "trend_adjusted", "class_aware_trend"}
 
 DEFAULT_HISTORY_CONFIG = {
     "min_long_history": 2,
@@ -18,6 +18,7 @@ DEFAULT_HISTORY_CONFIG = {
 
 DEFAULT_TREND_CONFIG = {
     "beta": 0.15,
+    "alpha": 0.15,
     "normalize_scores": True,
     "eps": 1e-6,
 }
@@ -31,6 +32,16 @@ def token_norm_scores(x: torch.Tensor) -> torch.Tensor:
     patch_tokens = x[:, 1:, :]
 
     return patch_tokens.norm(dim=-1)
+
+
+def cls_similarity_scores(x: torch.Tensor) -> torch.Tensor:
+    if x.ndim != 3:
+        raise ValueError("x deve ter shape [batch_size, num_tokens, hidden_dim].")
+
+    cls_token = torch.nn.functional.normalize(x[:, :1, :], dim=-1)
+    patch_tokens = torch.nn.functional.normalize(x[:, 1:, :], dim=-1)
+
+    return (patch_tokens * cls_token).sum(dim=-1)
 
 
 class TopKPruningStrategy:
@@ -67,6 +78,7 @@ class TopKPruningStrategy:
 
 
 class HybridHistoryPruningStrategy(TopKPruningStrategy):
+    # Estrategia exploratoria; provavelmente nao sera o caminho principal do artigo.
     def __init__(
         self,
         prune_layers: list[int],
@@ -248,6 +260,40 @@ class TrendAdjustedPruningStrategy(TopKPruningStrategy):
         ).squeeze(-1)
 
 
+class ClassAwareTrendPruningStrategy(TrendAdjustedPruningStrategy):
+    def step(self, layer_idx: int, x: torch.Tensor):
+        current_scores = self._prepare_scores(token_norm_scores(x))
+        class_scores = self._prepare_scores(cls_similarity_scores(x))
+        keep_indices = None
+
+        if layer_idx in self.prune_config:
+            pruning_scores = self._get_pruning_scores(
+                current_scores=current_scores,
+                class_scores=class_scores,
+            )
+            x, keep_indices = topk_prune_tokens(
+                x=x,
+                scores=pruning_scores,
+                keep_ratio=self.prune_config[layer_idx],
+                preserve_order=self.preserve_order,
+                return_indices=True,
+            )
+            current_scores = self._gather_scores(current_scores, keep_indices)
+
+        self.previous_scores = current_scores
+
+        return x, keep_indices
+
+    def _get_pruning_scores(
+        self,
+        current_scores: torch.Tensor,
+        class_scores: torch.Tensor,
+    ) -> torch.Tensor:
+        trend_adjusted_scores = super()._get_pruning_scores(current_scores)
+
+        return trend_adjusted_scores + self.trend_config["alpha"] * class_scores
+
+
 def create_pruning_strategy(
     pruning_method: str,
     prune_layers: list[int],
@@ -275,6 +321,15 @@ def create_pruning_strategy(
 
     if pruning_method == "trend_adjusted":
         return TrendAdjustedPruningStrategy(
+            prune_layers=prune_layers,
+            keep_ratios=keep_ratios,
+            score_method=score_method,
+            preserve_order=preserve_order,
+            trend_config=history_config,
+        )
+
+    if pruning_method == "class_aware_trend":
+        return ClassAwareTrendPruningStrategy(
             prune_layers=prune_layers,
             keep_ratios=keep_ratios,
             score_method=score_method,

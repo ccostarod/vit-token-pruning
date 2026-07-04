@@ -60,8 +60,16 @@ def main():
         expected_token_counts=[197, 197, 158, 158, 104, 104, 104, 58, 58, 58, 58, 58, 58],
     )
 
+    # Hybrid History fica como estrategia exploratoria; o foco deve seguir em Trend/Class-Aware.
     run_check(
         pruning_method="trend_adjusted",
+        prune_layers=[1, 3, 6],
+        keep_ratios=[0.8, 0.65, 0.55],
+        expected_token_counts=[197, 197, 158, 158, 104, 104, 104, 58, 58, 58, 58, 58, 58],
+    )
+
+    run_check(
+        pruning_method="class_aware_trend",
         prune_layers=[1, 3, 6],
         keep_ratios=[0.8, 0.65, 0.55],
         expected_token_counts=[197, 197, 158, 158, 104, 104, 104, 58, 58, 58, 58, 58, 58],
