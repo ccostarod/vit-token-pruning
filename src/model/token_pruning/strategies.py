@@ -3,7 +3,7 @@ import torch
 from model.token_pruning.ops import gather_tokens, topk_prune_tokens
 
 
-PRUNING_METHODS = {"topk", "hybrid_history"}
+PRUNING_METHODS = {"topk", "hybrid_history", "trend_adjusted"}
 
 DEFAULT_HISTORY_CONFIG = {
     "min_long_history": 2,
@@ -12,6 +12,12 @@ DEFAULT_HISTORY_CONFIG = {
     "alpha_ema": 0.3,
     "gamma": 0.7,
     "stability_weight": 0.2,
+    "normalize_scores": True,
+    "eps": 1e-6,
+}
+
+DEFAULT_TREND_CONFIG = {
+    "beta": 0.15,
     "normalize_scores": True,
     "eps": 1e-6,
 }
@@ -169,6 +175,79 @@ class HybridHistoryPruningStrategy(TopKPruningStrategy):
         ).squeeze(-1)
 
 
+class TrendAdjustedPruningStrategy(TopKPruningStrategy):
+    def __init__(
+        self,
+        prune_layers: list[int],
+        keep_ratios: list[float],
+        score_method: str = "token_norm",
+        preserve_order: bool = True,
+        trend_config: dict | None = None,
+    ):
+        super().__init__(
+            prune_layers=prune_layers,
+            keep_ratios=keep_ratios,
+            score_method=score_method,
+            preserve_order=preserve_order,
+        )
+
+        self.trend_config = {
+            **DEFAULT_TREND_CONFIG,
+            **(trend_config or {}),
+        }
+        self.previous_scores = None
+
+    def reset(self):
+        self.previous_scores = None
+
+    def step(self, layer_idx: int, x: torch.Tensor):
+        current_scores = self._prepare_scores(token_norm_scores(x))
+        keep_indices = None
+
+        if layer_idx in self.prune_config:
+            pruning_scores = self._get_pruning_scores(current_scores)
+            x, keep_indices = topk_prune_tokens(
+                x=x,
+                scores=pruning_scores,
+                keep_ratio=self.prune_config[layer_idx],
+                preserve_order=self.preserve_order,
+                return_indices=True,
+            )
+            current_scores = self._gather_scores(current_scores, keep_indices)
+
+        self.previous_scores = current_scores
+
+        return x, keep_indices
+
+    def _prepare_scores(self, scores: torch.Tensor) -> torch.Tensor:
+        if not self.trend_config["normalize_scores"]:
+            return scores
+
+        eps = self.trend_config["eps"]
+        mean = scores.mean(dim=1, keepdim=True)
+        std = scores.std(dim=1, keepdim=True, unbiased=False)
+
+        return (scores - mean) / (std + eps)
+
+    def _get_pruning_scores(self, current_scores: torch.Tensor) -> torch.Tensor:
+        if self.previous_scores is None:
+            return current_scores
+
+        trend = current_scores - self.previous_scores
+
+        return current_scores + self.trend_config["beta"] * trend
+
+    def _gather_scores(
+        self,
+        scores: torch.Tensor,
+        keep_indices: torch.Tensor,
+    ) -> torch.Tensor:
+        return gather_tokens(
+            tokens=scores.unsqueeze(-1),
+            indices=keep_indices,
+        ).squeeze(-1)
+
+
 def create_pruning_strategy(
     pruning_method: str,
     prune_layers: list[int],
@@ -192,6 +271,15 @@ def create_pruning_strategy(
             score_method=score_method,
             preserve_order=preserve_order,
             history_config=history_config,
+        )
+
+    if pruning_method == "trend_adjusted":
+        return TrendAdjustedPruningStrategy(
+            prune_layers=prune_layers,
+            keep_ratios=keep_ratios,
+            score_method=score_method,
+            preserve_order=preserve_order,
+            trend_config=history_config,
         )
 
     raise ValueError(
