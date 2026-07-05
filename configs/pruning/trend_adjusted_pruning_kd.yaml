@@ -1,0 +1,53 @@
+experiment:
+  name: trend_adjusted_pruning_kd
+  seed: 42
+
+paths:
+  data_dir: ./dataset
+  checkpoint_dir: ./checkpoints
+  results_dir: ./results/trend_adjusted_pruning_kd
+
+dataset:
+  image_size: 224
+  num_classes: 102
+  batch_size: 32
+  num_workers: 2
+  download: true
+  augmentation: true
+  random_erasing_p: 0.09852543003845121
+
+model:
+  name: vit_base_patch16_224.augreg_in21k
+  pretrained: false
+  init_checkpoint: ./checkpoints/optuna_best_best.pth
+
+pruning:
+  method: trend_adjusted
+  score_method: token_norm
+  prune_layers: [1, 3, 6]
+  keep_ratios: [0.8, 0.65, 0.55]
+  preserve_order: true
+  history:
+    beta: 0.15
+    normalize_scores: true
+    eps: 0.000001
+
+distillation:
+  enabled: true
+  teacher_checkpoint: ./checkpoints/optuna_best_best.pth
+  temperature: 2.0
+  supervised_weight: 0.5
+  distillation_weight: 0.5
+
+training:
+  epochs: 30
+  lr: 0.0000606870627400301
+  weight_decay: 0.007716841118309199
+  label_smoothing: 0.2912737878542151
+  mixup_alpha: 0.8830736738977027
+  early_stopping:
+    enabled: true
+    monitor: val_accuracy
+    mode: max
+    patience: 7
+    min_delta: 0.0

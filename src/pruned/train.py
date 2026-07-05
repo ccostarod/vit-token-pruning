@@ -7,13 +7,17 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from timm.data.mixup import Mixup
 from timm.loss import SoftTargetCrossEntropy
+from tqdm import tqdm
 
 SRC_DIR = Path(__file__).resolve().parents[1]
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from data.dataset import get_train_val_datasets, get_train_val_dataloaders
+from losses.distillation import distillation_kl_loss
+from metrics import calculate_metrics
 from model.pruned_vit import create_pruned_vit_model
+from model.vit import create_vit_model
 from train import train_epoch, validate
 from utils import (
     load_config,
@@ -34,6 +38,98 @@ def load_full_vit_checkpoint_into_pruned_model(model, checkpoint_path, device):
     model.backbone.load_state_dict(checkpoint["model_state_dict"], strict=True)
 
     return checkpoint
+
+
+def create_teacher_model(config, checkpoint_path, device):
+    model = create_vit_model(
+        num_classes=config["dataset"]["num_classes"],
+        pretrained=False,
+        model_name=config["model"]["name"],
+    )
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    model.load_state_dict(checkpoint["model_state_dict"], strict=True)
+    model = model.to(device)
+    model.eval()
+
+    for parameter in model.parameters():
+        parameter.requires_grad = False
+
+    return model, checkpoint
+
+
+def train_epoch_with_distillation(
+    model,
+    teacher_model,
+    train_loader,
+    supervised_criterion,
+    optimizer,
+    device,
+    temperature,
+    supervised_weight,
+    distillation_weight,
+    mixup_fn=None,
+):
+    model.train()
+    teacher_model.eval()
+
+    running_loss = 0.0
+    running_supervised_loss = 0.0
+    running_distillation_loss = 0.0
+    all_outputs = []
+    all_targets = []
+
+    progress_bar = tqdm(train_loader, desc="Treinando com KD", leave=False)
+
+    for images, labels in progress_bar:
+        images, labels = images.to(device), labels.to(device)
+        labels_for_metrics = labels
+
+        optimizer.zero_grad()
+
+        if mixup_fn is not None:
+            images, labels = mixup_fn(images, labels)
+
+        student_outputs = model(images)
+
+        with torch.no_grad():
+            teacher_outputs = teacher_model(images)
+
+        supervised_loss = supervised_criterion(student_outputs, labels)
+        kd_loss = distillation_kl_loss(
+            student_logits=student_outputs,
+            teacher_logits=teacher_outputs,
+            temperature=temperature,
+        )
+        loss = supervised_weight * supervised_loss + distillation_weight * kd_loss
+
+        loss.backward()
+        optimizer.step()
+
+        batch_size = images.size(0)
+        running_loss += loss.item() * batch_size
+        running_supervised_loss += supervised_loss.item() * batch_size
+        running_distillation_loss += kd_loss.item() * batch_size
+
+        all_outputs.append(student_outputs.detach().cpu())
+        all_targets.append(labels_for_metrics.detach().cpu())
+
+        progress_bar.set_postfix(
+            {
+                "loss": f"{loss.item():.4f}",
+                "kd": f"{kd_loss.item():.4f}",
+            }
+        )
+
+    epoch_loss = running_loss / len(train_loader.dataset)
+    supervised_epoch_loss = running_supervised_loss / len(train_loader.dataset)
+    distillation_epoch_loss = running_distillation_loss / len(train_loader.dataset)
+
+    all_outputs = torch.cat(all_outputs)
+    all_targets = torch.cat(all_targets)
+
+    metrics = calculate_metrics(all_outputs, all_targets)
+
+    return epoch_loss, supervised_epoch_loss, distillation_epoch_loss, metrics
 
 
 def main(config: dict):
@@ -72,6 +168,25 @@ def main(config: dict):
     early_stopping_config = config["training"].get("early_stopping", {})
     early_stopping_enabled = early_stopping_config.get("enabled", False)
     early_stopping_monitor = early_stopping_config.get("monitor", "val_accuracy")
+    distillation_config = config.get("distillation", {})
+    distillation_enabled = distillation_config.get("enabled", False)
+    distillation_temperature = distillation_config.get("temperature", 2.0)
+    supervised_weight = distillation_config.get("supervised_weight", 0.5)
+    distillation_weight = distillation_config.get("distillation_weight", 0.5)
+    teacher_checkpoint_path = distillation_config.get("teacher_checkpoint", init_checkpoint)
+
+    if distillation_enabled:
+        if distillation_temperature <= 0:
+            raise ValueError("distillation.temperature deve ser maior que zero.")
+        if supervised_weight < 0 or distillation_weight < 0:
+            raise ValueError(
+                "distillation.supervised_weight e distillation.distillation_weight "
+                "devem ser maiores ou iguais a zero."
+            )
+        if supervised_weight + distillation_weight == 0:
+            raise ValueError(
+                "A soma de supervised_weight e distillation_weight deve ser maior que zero."
+            )
 
     set_seed(seed)
 
@@ -128,6 +243,31 @@ def main(config: dict):
     print(f"Teacher best_metric: {teacher_checkpoint.get('best_metric')}")
 
     model = model.to(device)
+    teacher_model = None
+
+    if distillation_enabled:
+        if teacher_checkpoint_path is None:
+            raise ValueError(
+                "distillation.teacher_checkpoint deve apontar para o checkpoint do teacher."
+            )
+
+        teacher_model, distillation_teacher_checkpoint = create_teacher_model(
+            config=config,
+            checkpoint_path=teacher_checkpoint_path,
+            device=device,
+        )
+
+        print(
+            "Knowledge Distillation habilitado | "
+            f"teacher: {teacher_checkpoint_path} | "
+            f"temperature: {distillation_temperature} | "
+            f"supervised_weight: {supervised_weight} | "
+            f"distillation_weight: {distillation_weight}"
+        )
+        print(
+            "KD teacher best_metric: "
+            f"{distillation_teacher_checkpoint.get('best_metric')}"
+        )
 
     eval_criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
     train_criterion = eval_criterion
@@ -172,6 +312,8 @@ def main(config: dict):
         "train_macro_f1": [],
         "val_macro_f1": [],
         "num_tokens_final": [],
+        "train_supervised_loss": [],
+        "train_distillation_loss": [],
     }
 
     best_val_accuracy = 0.0
@@ -194,14 +336,33 @@ def main(config: dict):
     for epoch in range(1, epochs + 1):
         print(f"\nEpoca {epoch}/{epochs}")
 
-        train_loss, train_metrics = train_epoch(
-            model=model,
-            train_loader=train_loader,
-            criterion=train_criterion,
-            optimizer=optimizer,
-            device=device,
-            mixup_fn=mixup_fn,
-        )
+        train_supervised_loss = None
+        train_distillation_loss = None
+
+        if distillation_enabled:
+            train_loss, train_supervised_loss, train_distillation_loss, train_metrics = (
+                train_epoch_with_distillation(
+                    model=model,
+                    teacher_model=teacher_model,
+                    train_loader=train_loader,
+                    supervised_criterion=train_criterion,
+                    optimizer=optimizer,
+                    device=device,
+                    temperature=distillation_temperature,
+                    supervised_weight=supervised_weight,
+                    distillation_weight=distillation_weight,
+                    mixup_fn=mixup_fn,
+                )
+            )
+        else:
+            train_loss, train_metrics = train_epoch(
+                model=model,
+                train_loader=train_loader,
+                criterion=train_criterion,
+                optimizer=optimizer,
+                device=device,
+                mixup_fn=mixup_fn,
+            )
 
         val_loss, val_metrics = validate(
             model=model,
@@ -226,6 +387,12 @@ def main(config: dict):
             f"Train Macro-F1: {train_macro_f1:.4f}"
         )
 
+        if distillation_enabled:
+            print(
+                f"Train Supervised Loss: {train_supervised_loss:.4f} | "
+                f"Train KD Loss: {train_distillation_loss:.4f}"
+            )
+
         print(
             f"Val Loss: {val_loss:.4f} | "
             f"Val Acc: {val_accuracy:.4f} | "
@@ -241,6 +408,8 @@ def main(config: dict):
         history["train_macro_f1"].append(train_macro_f1)
         history["val_macro_f1"].append(val_macro_f1)
         history["num_tokens_final"].append(num_tokens_final)
+        history["train_supervised_loss"].append(train_supervised_loss)
+        history["train_distillation_loss"].append(train_distillation_loss)
 
         if val_accuracy > best_val_accuracy:
             best_val_accuracy = val_accuracy
